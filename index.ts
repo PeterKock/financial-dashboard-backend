@@ -1,37 +1,58 @@
-import express, { Request, Response } from 'express';
-import http from 'http';
-import { Server as WebSocketServer, WebSocket } from 'ws';
-import cors from 'cors';
+import express from "express";
+import { WebSocketServer } from "ws";
+import cors from "cors";
+import dotenv from "dotenv";
+
+dotenv.config();
 
 const app = express();
 app.use(cors());
 
-const server = http.createServer(app);
+const server = app.listen(4000, () => {
+    console.log("Backend listening on http://localhost:4000");
+});
+
 const wss = new WebSocketServer({ server });
 
-app.get('/', (_req: Request, res: Response) => {
-    res.send('Backend is live 🚀');
-});
+const API_KEY = process.env.FINNHUB_API_KEY!;
+const SYMBOL = "AAPL";
 
-wss.on('connection', (ws: WebSocket) => {
-    console.log('🟢 WebSocket client connected');
+wss.on("connection", (ws) => {
+    console.log("Client connected");
 
+    const sendStockPrice = async () => {
+        try {
+            const res = await fetch(
+                `https://finnhub.io/api/v1/quote?symbol=${SYMBOL}&token=${API_KEY}`
+            );
+            const data = await res.json();
+
+            const price = data.c; // current price from Finnhub
+
+            if (!price) {
+                console.warn("No price returned from Finnhub:", data);
+                return;
+            }
+
+            ws.send(
+                JSON.stringify({
+                    symbol: SYMBOL,
+                    price: price.toString(),
+                    time: new Date().toISOString(),
+                })
+            );
+        } catch (error) {
+            console.error("Error fetching stock data from Finnhub:", error);
+        }
+    };
+
+    sendStockPrice().catch(console.error);
     const interval = setInterval(() => {
-        const mockData = {
-            symbol: 'FAKE',
-            price: (Math.random() * 1000).toFixed(2),
-            time: new Date().toISOString()
-        };
-        ws.send(JSON.stringify(mockData));
-    }, 2000);
+        sendStockPrice().catch(console.error);
+    }, 15000);
 
-    ws.on('close', () => {
-        console.log('🔴 WebSocket client disconnected');
+    ws.on("close", () => {
         clearInterval(interval);
+        console.log("Client disconnected");
     });
-});
-
-const PORT = 4000;
-server.listen(PORT, () => {
-    console.log(`🚀 Backend server running at http://localhost:${PORT}`);
 });
