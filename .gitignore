@@ -1,0 +1,16 @@
+# Node dependencies
+node_modules/
+
+# Environment variables
+.env
+
+# Build output (if you compile later)
+dist/
+
+# IDE configs
+.idea/
+.DS_Store
+
+# Docker build cache
+.dockerignore
+Dockerfile
