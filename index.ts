@@ -15,40 +15,53 @@ const server = app.listen(4000, () => {
 const wss = new WebSocketServer({ server });
 
 const API_KEY = process.env.FINNHUB_API_KEY!;
-const SYMBOL = "AAPL";
+const SYMBOLS = ["AAPL", "GOOG", "TSLA"]; // Multiple symbols supported
 
 wss.on("connection", (ws) => {
     console.log("Client connected");
 
-    const sendStockPrice = async () => {
+    const fetchStockPrice = async (symbol: string) => {
         try {
             const res = await fetch(
-                `https://finnhub.io/api/v1/quote?symbol=${SYMBOL}&token=${API_KEY}`
+                `https://finnhub.io/api/v1/quote?symbol=${symbol}&token=${API_KEY}`
             );
             const data = await res.json();
 
-            const price = data.c; // current price from Finnhub
+            const price = data.c;
 
             if (!price) {
-                console.warn("No price returned from Finnhub:", data);
-                return;
+                console.warn(`No price returned for ${symbol}:`, data);
+                return null; // Gracefully skip symbol if no price
             }
 
-            ws.send(
-                JSON.stringify({
-                    symbol: SYMBOL,
-                    price: price.toString(),
-                    time: new Date().toISOString(),
-                })
-            );
+            return {
+                symbol,
+                price: price.toString(),
+                time: new Date().toISOString(),
+            };
         } catch (error) {
-            console.error("Error fetching stock data from Finnhub:", error);
+            console.error(`Error fetching ${symbol} data from Finnhub:`, error);
+            return null; // Ensure robustness even on errors
         }
     };
 
-    sendStockPrice().catch(console.error);
+    const sendStockPrices = async () => {
+        const stockPromises = SYMBOLS.map(fetchStockPrice);
+        const stocks = await Promise.all(stockPromises);
+
+        const validStocks = stocks.filter((stock) => stock !== null);
+
+        if (validStocks.length > 0) {
+            ws.send(JSON.stringify(validStocks));
+        } else {
+            console.warn("No valid stock data retrieved.");
+        }
+    };
+
+    // Send immediately upon connection, then every 15 seconds
+    sendStockPrices().catch(console.error);
     const interval = setInterval(() => {
-        sendStockPrice().catch(console.error);
+        sendStockPrices().catch(console.error);
     }, 15000);
 
     ws.on("close", () => {
