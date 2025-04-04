@@ -36,7 +36,7 @@ wss.on("connection", (ws) => {
 
             return {
                 symbol,
-                price: price.toString(),
+                price: price,
                 time: new Date().toISOString(),
             };
         } catch (error) {
