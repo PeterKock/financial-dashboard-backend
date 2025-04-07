@@ -8,8 +8,8 @@ dotenv.config();
 const app = express();
 app.use(cors());
 
-const server = app.listen(4000, () => {
-    console.log("Backend listening on http://localhost:4000");
+const server = app.listen(4000, '0.0.0.0', () => {
+    console.log("Backend listening on http://0.0.0.0:4000");
 });
 
 const wss = new WebSocketServer({ server });
