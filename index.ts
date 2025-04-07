@@ -12,7 +12,7 @@ const server = app.listen(4000, '0.0.0.0', () => {
     console.log("Backend listening on http://0.0.0.0:4000");
 });
 
-const wss = new WebSocketServer({ server });
+const wss = new WebSocketServer({ server, path: "/ws" });
 
 const API_KEY = process.env.FINNHUB_API_KEY!;
 const SYMBOLS = ["AAPL", "GOOG", "TSLA"]; // Multiple symbols supported
