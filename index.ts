@@ -3,16 +3,28 @@ import { WebSocketServer } from "ws";
 import cors from "cors";
 import dotenv from "dotenv";
 
+// Load environment variables from .env.local if it exists, otherwise from .env
+dotenv.config({ path: '.env.local' });
 dotenv.config();
 
 const app = express();
-app.use(cors());
+const PORT = parseInt(process.env.PORT || '4000', 10);
+const CORS_ORIGIN = process.env.CORS_ORIGIN || "*";
 
-const server = app.listen(4000, '0.0.0.0', () => {
-    console.log("Backend listening on http://0.0.0.0:4000");
+app.use(cors({
+    origin: CORS_ORIGIN,
+    methods: ['GET', 'POST']
+}));
+
+const server = app.listen(PORT, '0.0.0.0', () => {
+    console.log(`Backend listening on http://0.0.0.0:${PORT}`);
 });
 
-const wss = new WebSocketServer({ server, path: "/ws" });
+const wss = new WebSocketServer({ 
+    server,
+    path: "/ws",
+    clientTracking: true
+});
 
 const API_KEY = process.env.FINNHUB_API_KEY!;
 const SYMBOLS = ["AAPL", "GOOG", "TSLA"]; // Multiple symbols supported
