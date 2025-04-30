@@ -29,21 +29,56 @@ const wss = new WebSocketServer({
 const API_KEY = process.env.FINNHUB_API_KEY!;
 const SYMBOLS = ["AAPL", "GOOG", "TSLA"]; // Multiple symbols supported
 
+// Rate limiting setup
+const CALLS_PER_MINUTE_LIMIT = 55; // Keep a small buffer below the 60 limit
+const apiCalls: number[] = [];
+const POLLING_INTERVAL = 15000; // 15 seconds
+
+function canMakeApiCall(callsNeeded: number): boolean {
+    const now = Date.now();
+    // Remove calls older than 1 minute
+    const oneMinuteAgo = now - 60000;
+    while (apiCalls.length > 0 && apiCalls[0] < oneMinuteAgo) {
+        apiCalls.shift();
+    }
+    return apiCalls.length + callsNeeded <= CALLS_PER_MINUTE_LIMIT;
+}
+
+function trackApiCall() {
+    apiCalls.push(Date.now());
+}
+
 wss.on("connection", (ws) => {
     console.log("Client connected");
 
     const fetchStockPrice = async (symbol: string) => {
         try {
+            // Check if we can make the API call
+            if (!canMakeApiCall(1)) {
+                console.warn(`Rate limit approaching, skipping fetch for ${symbol}`);
+                return null;
+            }
+
             const res = await fetch(
                 `https://finnhub.io/api/v1/quote?symbol=${symbol}&token=${API_KEY}`
             );
+            
+            // Track the API call
+            trackApiCall();
+
             const data = await res.json();
+
+            // Check for rate limit response
+            if (res.status === 429) {
+                console.warn('Rate limit exceeded, waiting for reset');
+                return null;
+            }
 
             const price = data.c;
 
             if (!price) {
                 console.warn(`No price returned for ${symbol}:`, data);
-                return null; // Gracefully skip symbol if no price
+                return null;
             }
 
             return {
@@ -53,11 +88,17 @@ wss.on("connection", (ws) => {
             };
         } catch (error) {
             console.error(`Error fetching ${symbol} data from Finnhub:`, error);
-            return null; // Ensure robustness even on errors
+            return null;
         }
     };
 
     const sendStockPrices = async () => {
+        // Check if we can make all needed API calls
+        if (!canMakeApiCall(SYMBOLS.length)) {
+            console.warn('Approaching rate limit, skipping this update cycle');
+            return;
+        }
+
         const stockPromises = SYMBOLS.map(fetchStockPrice);
         const stocks = await Promise.all(stockPromises);
 
@@ -70,11 +111,11 @@ wss.on("connection", (ws) => {
         }
     };
 
-    // Send immediately upon connection, then every 15 seconds
+    // Send immediately upon connection, then every POLLING_INTERVAL milliseconds
     sendStockPrices().catch(console.error);
     const interval = setInterval(() => {
         sendStockPrices().catch(console.error);
-    }, 15000);
+    }, POLLING_INTERVAL);
 
     ws.on("close", () => {
         clearInterval(interval);
